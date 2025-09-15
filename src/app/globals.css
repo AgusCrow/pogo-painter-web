@@ -177,9 +177,11 @@
 }
 
 .game-tile {
-  transition: all 0.2s ease-in-out;
+  transition: all 0.3s ease-in-out;
   position: relative;
   overflow: hidden;
+  min-height: 40px;
+  min-width: 40px;
 }
 
 .game-tile::before {
@@ -189,7 +191,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+  background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.2) 50%, transparent 70%);
   transform: translateX(-100%);
   transition: transform 0.6s;
 }
@@ -199,23 +201,67 @@
 }
 
 .game-tile:hover {
-  transform: scale(1.05);
+  transform: scale(1.08);
   z-index: 10;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
 }
 
 .game-tile.painted {
-  animation: paintSplash 0.4s ease-out;
+  animation: paintSplash 0.6s ease-out;
+  border-color: rgba(0, 0, 0, 0.3);
+}
+
+@keyframes playerMove {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.2) rotate(5deg);
+  }
+  50% {
+    transform: scale(1.1) rotate(-5deg);
+  }
+  75% {
+    transform: scale(1.15) rotate(3deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes tilePulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 8px rgba(255, 215, 0, 0);
+  }
 }
 
 .player-piece {
   animation: playerGlow 2s ease-in-out infinite;
   border-radius: 50%;
   transition: all 0.3s ease;
+  min-height: 24px;
+  min-width: 24px;
 }
 
 .player-piece.moving {
-  animation: bounce 0.6s ease-in-out;
+  animation: playerMove 0.8s ease-in-out, playerGlow 2s ease-in-out infinite;
+}
+
+.player-piece.moving::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
+  animation: playerMove 0.8s ease-in-out;
 }
 
 .score-animation {
@@ -224,13 +270,15 @@
 
 .game-board-container {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 2px;
-  border-radius: 12px;
+  padding: 4px;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .game-board {
   background: white;
-  border-radius: 10px;
+  border-radius: 12px;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
 .chat-message {
@@ -266,6 +314,22 @@
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .game-board-container {
+    padding: 2px;
+  }
+  
+  .game-tile {
+    min-height: 35px;
+    min-width: 35px;
+  }
+  
+  .player-piece {
+    min-height: 20px;
+    min-width: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .game-board-container {
     padding: 1px;
   }
   
@@ -273,11 +337,27 @@
     min-height: 30px;
     min-width: 30px;
   }
+  
+  .player-piece {
+    min-height: 18px;
+    min-width: 18px;
+  }
 }
 
-@media (max-width: 480px) {
-  .game-tile {
-    min-height: 25px;
-    min-width: 25px;
-  }
+/* Additional visual enhancements */
+.game-tile.highlight {
+  animation: tilePulse 1s ease-in-out;
+  border-color: #fbbf24 !important;
+}
+
+.game-tile.player-occupied {
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Board grid enhancement */
+.game-board {
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
 }

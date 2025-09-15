@@ -23,7 +23,7 @@ type GameState = {
   currentPlayerId: string | null;
 };
 
-const BOARD_SIZE = 10;
+const BOARD_SIZE = 12;
 const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
 
 // Game state storage
@@ -124,6 +124,8 @@ export const setupSocket = (io: Server) => {
 
       // Validate move
       if (data.x >= 0 && data.x < BOARD_SIZE && data.y >= 0 && data.y < BOARD_SIZE) {
+        console.log(`Player ${player.name} moving from (${player.x}, ${player.y}) to (${data.x}, ${data.y})`);
+        
         // Paint the tile
         const { updatedPlayer, boardUpdated } = paintTile(player, data.x, data.y);
         
@@ -142,11 +144,25 @@ export const setupSocket = (io: Server) => {
 
         // Emit board update if tile was painted
         if (boardUpdated) {
+          console.log(`Tile painted at (${data.x}, ${data.y}) by ${player.name}`);
           io.emit('boardUpdated', gameState.board);
         }
 
         // Broadcast updated game state
         broadcastGameState(io);
+
+        // Send move confirmation to player
+        socket.emit('moveConfirmed', {
+          success: true,
+          position: { x: data.x, y: data.y },
+          score: updatedPlayer.score
+        });
+      } else {
+        // Send move error to player
+        socket.emit('moveConfirmed', {
+          success: false,
+          error: 'Invalid move position'
+        });
       }
     });
 

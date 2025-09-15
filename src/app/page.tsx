@@ -38,7 +38,7 @@ type Message = {
   timestamp: string;
 };
 
-const BOARD_SIZE = 10;
+const BOARD_SIZE = 12;
 const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
 
 export default function PogoPainter() {
@@ -54,10 +54,10 @@ export default function PogoPainter() {
   const [joinedGame, setJoinedGame] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatMessage, setChatMessage] = useState('');
+  const [lastMove, setLastMove] = useState<{x: number, y: number} | null>(null);
   const [gameStatus, setGameStatus] = useState('waiting'); // waiting, playing, stopped
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Initialize board
+  const [paintingAnimations, setPaintingAnimations] = useState<{x: number, y: number}[]>([]);
   const initializeBoard = useCallback(() => {
     const board: Tile[][] = [];
     for (let y = 0; y < BOARD_SIZE; y++) {
@@ -79,10 +79,11 @@ export default function PogoPainter() {
   }, [messages]);
 
   useEffect(() => {
-    // Initialize game state
+    // Initialize game state with proper board
+    const initialBoard = initializeBoard();
     setGameState(prev => ({
       ...prev,
-      board: initializeBoard(),
+      board: initialBoard,
     }));
 
     // Setup socket connection
@@ -95,14 +96,17 @@ export default function PogoPainter() {
     socketInstance.on('connect', () => {
       setIsConnected(true);
       setGameState(prev => ({ ...prev, currentPlayerId: socketInstance.id }));
+      console.log('Connected to server with ID:', socketInstance.id);
     });
 
     socketInstance.on('disconnect', () => {
       setIsConnected(false);
+      console.log('Disconnected from server');
     });
 
     // Game events
     socketInstance.on('gameState', (state: GameState) => {
+      console.log('Received game state:', state);
       setGameState(state);
       setGameStatus(state.gameStarted ? 'playing' : 'waiting');
     });
@@ -119,10 +123,26 @@ export default function PogoPainter() {
         ...prev,
         players: prev.players.map(p => p.id === player.id ? player : p),
       }));
+      // Track last move for animation
+      setLastMove({x: player.x, y: player.y});
+      setTimeout(() => setLastMove(null), 800);
     });
 
     socketInstance.on('boardUpdated', (board: Tile[][]) => {
       setGameState(prev => ({ ...prev, board }));
+      // Add painting animation for recently painted tiles
+      const paintedTiles = [];
+      for (let y = 0; y < board.length; y++) {
+        for (let x = 0; x < board[y].length; x++) {
+          if (board[y][x].color && (!gameState.board[y] || !gameState.board[y][x].color)) {
+            paintedTiles.push({x, y});
+          }
+        }
+      }
+      if (paintedTiles.length > 0) {
+        setPaintingAnimations(paintedTiles);
+        setTimeout(() => setPaintingAnimations([]), 600);
+      }
     });
 
     socketInstance.on('gameStarted', (state: GameState) => {
@@ -154,6 +174,26 @@ export default function PogoPainter() {
         senderId: 'system',
         timestamp: new Date().toISOString(),
       }]);
+    });
+
+    // Move confirmation events
+    socketInstance.on('moveConfirmed', (data: { success: boolean; position?: {x: number, y: number}; score?: number; error?: string }) => {
+      if (data.success) {
+        console.log('Move confirmed:', data);
+        // Add visual feedback for successful move
+        if (data.position) {
+          setLastMove(data.position);
+          setTimeout(() => setLastMove(null), 800);
+        }
+      } else {
+        console.log('Move failed:', data.error);
+        // Show error feedback
+        setMessages(prev => [...prev, {
+          text: `Move failed: ${data.error || 'Unknown error'}`,
+          senderId: 'system',
+          timestamp: new Date().toISOString(),
+        }]);
+      }
     });
 
     // Message events
@@ -266,12 +306,30 @@ export default function PogoPainter() {
 
   const getTileColor = (tile: Tile) => {
     if (tile.color) return tile.color;
-    return '#f3f4f6';
+    return '#f8fafc'; // Lighter gray for better visibility
   };
 
   const getPlayerOnTile = (x: number, y: number) => {
     return gameState.players.find(p => p.x === x && p.y === y);
   };
+
+  // Debug function to log game state
+  const debugGameState = () => {
+    console.log('Game State:', {
+      boardSize: gameState.board.length,
+      players: gameState.players.length,
+      gameStarted: gameState.gameStarted,
+      currentPlayerId: gameState.currentPlayerId,
+      sampleTile: gameState.board[0]?.[0]
+    });
+  };
+
+  // Add debug button
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      window.debugGameState = debugGameState;
+    }
+  }, [gameState]);
 
   const getGameStatusMessage = () => {
     switch(gameStatus) {
@@ -314,6 +372,15 @@ export default function PogoPainter() {
             <Badge variant={getGameStatusColor()}>
               {getGameStatusMessage()}
             </Badge>
+            {process.env.NODE_ENV === 'development' && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={debugGameState}
+              >
+                Debug
+              </Button>
+            )}
           </div>
         </div>
 
@@ -333,29 +400,37 @@ export default function PogoPainter() {
                 <div className="flex justify-center">
                   <div className="game-board-container">
                     <div 
-                      className="game-board grid gap-1 p-4 shadow-inner"
+                      className="game-board grid gap-1 p-6 shadow-inner"
                       style={{ 
                         gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
-                        maxWidth: '500px',
-                        maxHeight: '500px'
+                        maxWidth: '600px',
+                        maxHeight: '600px',
+                        width: '100%',
+                        height: '100%'
                       }}
                     >
                       {gameState.board.map((row, y) =>
                         row.map((tile, x) => {
                           const playerOnTile = getPlayerOnTile(x, y);
+                          const isPainting = paintingAnimations.some(p => p.x === x && p.y === y);
+                          const isLastMove = lastMove && lastMove.x === x && lastMove.y === y;
                           return (
                             <div
                               key={`${x}-${y}`}
-                              className={`game-tile relative aspect-square border border-gray-300 rounded-sm transition-all duration-200 ${tile.color ? 'painted' : ''}`}
+                              className={`game-tile relative aspect-square border-2 border-gray-400 rounded-lg transition-all duration-300 ${tile.color ? 'painted' : ''} ${isPainting ? 'scale-110 highlight' : ''} ${isLastMove ? 'ring-4 ring-yellow-400' : ''} ${playerOnTile ? 'player-occupied' : ''}`}
                               style={{ backgroundColor: getTileColor(tile) }}
                             >
                               {playerOnTile && (
                                 <div
-                                  className="player-piece absolute inset-1 rounded-full border-2 border-white shadow-md"
+                                  className={`player-piece absolute inset-2 rounded-full border-3 border-white shadow-lg ${isLastMove ? 'animate-bounce' : 'animate-pulse'}`}
                                   style={{ backgroundColor: playerOnTile.color }}
                                   title={playerOnTile.name}
                                 />
                               )}
+                              {/* Add coordinate indicators for debugging */}
+                              <div className="absolute bottom-0 right-0 text-xs text-gray-500 opacity-30 pointer-events-none">
+                                {x},{y}
+                              </div>
                             </div>
                           );
                         })
