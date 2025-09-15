@@ -120,3 +120,164 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Pogo Painter Game Styles */
+@keyframes bounce {
+  0%, 20%, 53%, 80%, 100% {
+    animation-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+    transform: translate3d(0, 0, 0);
+  }
+  40%, 43% {
+    animation-timing-function: cubic-bezier(0.755, 0.05, 0.855, 0.06);
+    transform: translate3d(0, -8px, 0) scaleY(1.1);
+  }
+  70% {
+    animation-timing-function: cubic-bezier(0.755, 0.05, 0.855, 0.06);
+    transform: translate3d(0, -4px, 0) scaleY(1.05);
+  }
+  90% {
+    transform: translate3d(0, -2px, 0) scaleY(1.02);
+  }
+}
+
+@keyframes paintSplash {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes playerGlow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(255, 255, 255, 1), 0 0 25px rgba(255, 255, 255, 0.6);
+  }
+}
+
+@keyframes tilePaint {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.game-tile {
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.game-tile::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+  transform: translateX(-100%);
+  transition: transform 0.6s;
+}
+
+.game-tile:hover::before {
+  transform: translateX(100%);
+}
+
+.game-tile:hover {
+  transform: scale(1.05);
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.game-tile.painted {
+  animation: paintSplash 0.4s ease-out;
+}
+
+.player-piece {
+  animation: playerGlow 2s ease-in-out infinite;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.player-piece.moving {
+  animation: bounce 0.6s ease-in-out;
+}
+
+.score-animation {
+  animation: paintSplash 0.5s ease-out;
+}
+
+.game-board-container {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 2px;
+  border-radius: 12px;
+}
+
+.game-board {
+  background: white;
+  border-radius: 10px;
+}
+
+.chat-message {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.player-join-animation {
+  animation: playerJoin 0.5s ease-out;
+}
+
+@keyframes playerJoin {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .game-board-container {
+    padding: 1px;
+  }
+  
+  .game-tile {
+    min-height: 30px;
+    min-width: 30px;
+  }
+}
+
+@media (max-width: 480px) {
+  .game-tile {
+    min-height: 25px;
+    min-width: 25px;
+  }
+}
