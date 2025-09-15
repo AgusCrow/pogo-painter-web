@@ -121,21 +121,32 @@ export const setupSocket = (io: Server) => {
 
     // Handle player movement
     socket.on('movePlayer', (data: { playerId: string; x: number; y: number }) => {
-      if (!gameState.gameStarted) return;
+      console.log('SERVER: Received movePlayer event:', data);
+      
+      if (!gameState.gameStarted) {
+        console.log('SERVER: Game not started, ignoring move');
+        return;
+      }
 
       const player = gameState.players.find(p => p.id === data.playerId);
-      if (!player) return;
+      if (!player) {
+        console.log('SERVER: Player not found:', data.playerId);
+        return;
+      }
 
+      console.log(`SERVER: Player ${player.name} moving from (${player.x}, ${player.y}) to (${data.x}, ${data.y})`);
+      
       // Validate move
       if (data.x >= 0 && data.x < BOARD_SIZE && data.y >= 0 && data.y < BOARD_SIZE) {
-        console.log(`Player ${player.name} moving from (${player.x}, ${player.y}) to (${data.x}, ${data.y})`);
-        
         // Paint the tile
         const { updatedPlayer, boardUpdated } = paintTile(player, data.x, data.y);
         
         // Update player position
         updatedPlayer.x = data.x;
         updatedPlayer.y = data.y;
+
+        console.log('SERVER: Updated player:', updatedPlayer);
+        console.log('SERVER: Board updated:', boardUpdated);
 
         // Update player in game state
         const playerIndex = gameState.players.findIndex(p => p.id === data.playerId);
@@ -144,15 +155,17 @@ export const setupSocket = (io: Server) => {
         }
 
         // Emit player movement event
+        console.log('SERVER: Emitting playerMoved event');
         io.emit('playerMoved', updatedPlayer);
 
         // Emit board update if tile was painted
         if (boardUpdated) {
-          console.log(`Tile painted at (${data.x}, ${data.y}) by ${player.name}`);
+          console.log(`SERVER: Tile painted at (${data.x}, ${data.y}) by ${player.name}`);
           io.emit('boardUpdated', gameState.board);
         }
 
         // Broadcast updated game state
+        console.log('SERVER: Broadcasting game state');
         broadcastGameState(io);
 
         // Send move confirmation to player
@@ -162,6 +175,7 @@ export const setupSocket = (io: Server) => {
           score: updatedPlayer.score
         });
       } else {
+        console.log('SERVER: Invalid move position');
         // Send move error to player
         socket.emit('moveConfirmed', {
           success: false,

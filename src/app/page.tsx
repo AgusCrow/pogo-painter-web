@@ -99,7 +99,7 @@ export default function PogoPainter() {
     lastUpdateTime.current = now;
 
     setInterpolatedPlayers(prev => {
-      return gameState.players.map(player => {
+      const newPlayers = gameState.players.map(player => {
         const prevPlayer = prev.find(p => p.id === player.id) || player;
         
         // If player has actual position different from display position, interpolate
@@ -110,6 +110,13 @@ export default function PogoPainter() {
         
         // Calculate distance
         const distance = Math.sqrt(Math.pow(targetX - currentX, 2) + Math.pow(targetY - currentY, 2));
+        
+        console.log(`Animating player ${player.name}:`, {
+          target: { x: targetX, y: targetY },
+          current: { x: currentX, y: currentY },
+          distance,
+          isMoving: distance > 0.1
+        });
         
         // If distance is significant, interpolate
         if (distance > 0.1) {
@@ -134,6 +141,9 @@ export default function PogoPainter() {
           moveProgress: 1
         };
       });
+      
+      console.log('Interpolated players:', newPlayers);
+      return newPlayers;
     });
 
     animationRef.current = requestAnimationFrame(animatePlayers);
@@ -208,7 +218,7 @@ export default function PogoPainter() {
 
     // Enhanced game state handler with queueing
   socketInstance.on('gameState', (state: GameState) => {
-    console.log('Received game state:', state);
+    console.log('CLIENT: Received game state:', state);
     setGameStatus(state.gameStarted ? 'playing' : 'waiting');
     
     // Queue board updates for smooth processing
@@ -223,6 +233,9 @@ export default function PogoPainter() {
     });
 
     socketInstance.on('playerMoved', (player: Player) => {
+      console.log('CLIENT: Player moved event received:', player);
+      
+      // Update game state immediately for responsiveness
       setGameState(prev => ({
         ...prev,
         players: prev.players.map(p => p.id === player.id ? player : p),
@@ -233,7 +246,7 @@ export default function PogoPainter() {
       setTimeout(() => setLastMove(null), 800);
       
       // Add movement trail effect
-      console.log(`Player ${player.name} moved to (${player.x}, ${player.y})`);
+      console.log(`CLIENT: Player ${player.name} moved to (${player.x}, ${player.y})`);
     });
 
     // Enhanced board update with better synchronization
@@ -302,15 +315,16 @@ export default function PogoPainter() {
 
     // Move confirmation events
     socketInstance.on('moveConfirmed', (data: { success: boolean; position?: {x: number, y: number}; score?: number; error?: string }) => {
+      console.log('CLIENT: Move confirmation received:', data);
       if (data.success) {
-        console.log('Move confirmed:', data);
+        console.log('CLIENT: Move confirmed:', data);
         // Add visual feedback for successful move
         if (data.position) {
           setLastMove(data.position);
           setTimeout(() => setLastMove(null), 800);
         }
       } else {
-        console.log('Move failed:', data.error);
+        console.log('CLIENT: Move failed:', data.error);
         // Show error feedback
         setMessages(prev => [...prev, {
           text: `Move failed: ${data.error || 'Unknown error'}`,
@@ -359,20 +373,30 @@ export default function PogoPainter() {
   };
 
   const movePlayer = (dx: number, dy: number) => {
+    console.log('movePlayer called:', { dx, dy, gameStarted: gameState.gameStarted, currentPlayerId: gameState.currentPlayerId, socket: !!socket });
+    
     if (!socket || !gameState.currentPlayerId || !gameState.gameStarted) return;
 
     const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayerId);
-    if (!currentPlayer) return;
+    if (!currentPlayer) {
+      console.log('Current player not found');
+      return;
+    }
 
     const newX = currentPlayer.x + dx;
     const newY = currentPlayer.y + dy;
 
+    console.log('Attempting move:', { from: { x: currentPlayer.x, y: currentPlayer.y }, to: { x: newX, y: newY } });
+
     if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE) {
+      console.log('Sending move to server');
       socket.emit('movePlayer', {
         playerId: gameState.currentPlayerId,
         x: newX,
         y: newY,
       });
+    } else {
+      console.log('Invalid move position');
     }
   };
 
@@ -389,29 +413,35 @@ export default function PogoPainter() {
   const handleKeyPress = useCallback((e: KeyboardEvent) => {
     if (!gameState.gameStarted) return;
     
+    console.log('Key pressed:', e.key, 'Game started:', gameState.gameStarted, 'Current player:', gameState.currentPlayerId);
+    
     switch(e.key) {
       case 'ArrowUp':
       case 'w':
       case 'W':
         e.preventDefault();
+        console.log('Moving up');
         movePlayer(0, -1);
         break;
       case 'ArrowDown':
       case 's':
       case 'S':
         e.preventDefault();
+        console.log('Moving down');
         movePlayer(0, 1);
         break;
       case 'ArrowLeft':
       case 'a':
       case 'A':
         e.preventDefault();
+        console.log('Moving left');
         movePlayer(-1, 0);
         break;
       case 'ArrowRight':
       case 'd':
       case 'D':
         e.preventDefault();
+        console.log('Moving right');
         movePlayer(1, 0);
         break;
     }
@@ -434,12 +464,8 @@ export default function PogoPainter() {
   };
 
   const getPlayerOnTile = (x: number, y: number) => {
-    // Use interpolated positions for smooth visual feedback
-    return interpolatedPlayers.find(p => {
-      const playerX = Math.round(p.displayX ?? p.x);
-      const playerY = Math.round(p.displayY ?? p.y);
-      return playerX === x && playerY === y;
-    });
+    // Temporarily use exact positions for debugging
+    return gameState.players.find(p => p.x === x && p.y === y);
   };
 
   // Debug function to log game state
@@ -540,17 +566,10 @@ export default function PogoPainter() {
                     >
                       {gameState.board.map((row, y) =>
                         row.map((tile, x) => {
+                          // Simplified rendering - just show players at exact positions
                           const playerOnTile = getPlayerOnTile(x, y);
                           const isPainting = paintingAnimations.some(p => p.x === x && p.y === y);
                           const isLastMove = lastMove && lastMove.x === x && lastMove.y === y;
-                          
-                          // Find all interpolated players near this tile for smooth transitions
-                          const nearbyPlayers = interpolatedPlayers.filter(p => {
-                            const playerX = p.displayX ?? p.x;
-                            const playerY = p.displayY ?? p.y;
-                            const distance = Math.sqrt(Math.pow(playerX - x, 2) + Math.pow(playerY - y, 2));
-                            return distance < 1.5; // Players within 1.5 tiles
-                          });
 
                           return (
                             <div
@@ -558,31 +577,16 @@ export default function PogoPainter() {
                               className={`game-tile relative aspect-square border-2 border-gray-400 rounded-lg transition-all duration-300 ${tile.color ? 'painted' : ''} ${isPainting ? 'scale-110 highlight' : ''} ${isLastMove ? 'ring-4 ring-yellow-400' : ''} ${playerOnTile ? 'player-occupied' : ''}`}
                               style={{ backgroundColor: getTileColor(tile) }}
                             >
-                              {/* Render all nearby players with smooth positioning */}
-                              {nearbyPlayers.map((player, index) => {
-                                const playerX = player.displayX ?? player.x;
-                                const playerY = player.displayY ?? player.y;
-                                const offsetX = (playerX - x) * 100; // Percentage offset
-                                const offsetY = (playerY - y) * 100;
-                                
-                                return (
-                                  <div
-                                    key={player.id}
-                                    className={`absolute rounded-full border-3 border-white shadow-lg transition-all duration-200 ${player.isMoving ? 'animate-pulse scale-110' : 'scale-100'}`}
-                                    style={{
-                                      backgroundColor: player.color,
-                                      width: '60%',
-                                      height: '60%',
-                                      left: `${20 + offsetX}%`,
-                                      top: `${20 + offsetY}%`,
-                                      transform: `translate(-50%, -50%) scale(${player.isMoving ? 1.1 : 1})`,
-                                      zIndex: index + 1,
-                                      opacity: playerOnTile?.id === player.id ? 1 : 0.7
-                                    }}
-                                    title={player.name}
-                                  />
-                                );
-                              })}
+                              {/* Simple player rendering */}
+                              {playerOnTile && (
+                                <div
+                                  className="absolute inset-2 rounded-full border-3 border-white shadow-lg animate-pulse"
+                                  style={{
+                                    backgroundColor: playerOnTile.color,
+                                  }}
+                                  title={playerOnTile.name}
+                                />
+                              )}
                               
                               {/* Add coordinate indicators for debugging */}
                               <div className="absolute bottom-0 right-0 text-xs text-gray-500 opacity-30 pointer-events-none">
