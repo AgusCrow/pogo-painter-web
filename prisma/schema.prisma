@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -17,16 +14,76 @@ model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
+  password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  players   Player[]
+  
+  @@map("users")
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Game {
+  id          String      @id @default(cuid())
+  name        String?
+  status      GameStatus  @default(WAITING)
+  maxPlayers  Int         @default(4)
+  timeLimit   Int         @default(120) // seconds
+  boardSize   Int         @default(10) // 10x10 grid
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  players     Player[]
+  tiles       GameTile[]
+  
+  @@map("games")
+}
+
+model Player {
+  id         String      @id @default(cuid())
+  userId     String
+  gameId     String
+  color      String      // hex color
+  positionX  Int         @default(0)
+  positionY  Int         @default(0)
+  score      Int         @default(0)
+  status     PlayerStatus @default(ACTIVE)
+  isAI       Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game       Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  @@unique([gameId, userId])
+  @@map("players")
+}
+
+model GameTile {
+  id       String     @id @default(cuid())
+  gameId   String
+  x        Int
+  y        Int
+  color    String?    // hex color of the player who painted it
+  hasPowerUp Boolean  @default(false)
+  powerUpType String? // "SPEED", "JUMP", "SPRAY"
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  game     Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  @@unique([gameId, x, y])
+  @@map("game_tiles")
+}
+
+enum GameStatus {
+  WAITING
+  PLAYING
+  FINISHED
+}
+
+enum PlayerStatus {
+  ACTIVE
+  STUNNED
+  ELIMINATED
 }
