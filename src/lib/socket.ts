@@ -7,6 +7,10 @@ type Player = {
   x: number;
   y: number;
   score: number;
+  displayX?: number; // For smooth interpolation
+  displayY?: number; // For smooth interpolation
+  isMoving?: boolean;
+  moveProgress?: number;
 };
 
 type Tile = {

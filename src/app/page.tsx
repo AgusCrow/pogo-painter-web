@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
 import { io } from 'socket.io-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,10 @@ type Player = {
   x: number;
   y: number;
   score: number;
+  displayX?: number; // For smooth interpolation
+  displayY?: number; // For smooth interpolation
+  isMoving?: boolean;
+  moveProgress?: number;
 };
 
 type Tile = {
@@ -58,6 +62,104 @@ export default function PogoPainter() {
   const [gameStatus, setGameStatus] = useState('waiting'); // waiting, playing, stopped
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [paintingAnimations, setPaintingAnimations] = useState<{x: number, y: number}[]>([]);
+  const [animationFrame, setAnimationFrame] = useState<number | null>(null);
+  const [interpolatedPlayers, setInterpolatedPlayers] = useState<Player[]>([]);
+  const [boardUpdateQueue, setBoardUpdateQueue] = useState<GameState[]>([]);
+  const lastUpdateTime = useRef<number>(Date.now());
+  const animationRef = useRef<number>(0);
+  const isProcessingRef = useRef(false);
+
+  // Process board updates in batches for better performance
+  const processBoardUpdates = useCallback(() => {
+    if (isProcessingRef.current || boardUpdateQueue.length === 0) return;
+    
+    isProcessingRef.current = true;
+    const latestUpdate = boardUpdateQueue[boardUpdateQueue.length - 1];
+    
+    // Use requestAnimationFrame for smooth visual updates
+    requestAnimationFrame(() => {
+      setGameState(latestUpdate);
+      setBoardUpdateQueue(prev => prev.slice(1));
+      isProcessingRef.current = false;
+    });
+  }, [boardUpdateQueue]);
+
+  // Process updates efficiently
+  useEffect(() => {
+    if (boardUpdateQueue.length > 0) {
+      const timer = setTimeout(processBoardUpdates, 16); // ~60fps
+      return () => clearTimeout(timer);
+    }
+  }, [boardUpdateQueue, processBoardUpdates]);
+
+  // Animation system for smooth player movement
+  const animatePlayers = useCallback(() => {
+    const now = Date.now();
+    const deltaTime = now - lastUpdateTime.current;
+    lastUpdateTime.current = now;
+
+    setInterpolatedPlayers(prev => {
+      return gameState.players.map(player => {
+        const prevPlayer = prev.find(p => p.id === player.id) || player;
+        
+        // If player has actual position different from display position, interpolate
+        const targetX = player.x;
+        const targetY = player.y;
+        const currentX = prevPlayer.displayX ?? targetX;
+        const currentY = prevPlayer.displayY ?? targetY;
+        
+        // Calculate distance
+        const distance = Math.sqrt(Math.pow(targetX - currentX, 2) + Math.pow(targetY - currentY, 2));
+        
+        // If distance is significant, interpolate
+        if (distance > 0.1) {
+          const interpolationSpeed = Math.min(deltaTime / 200, 1); // 200ms for full movement
+          const newX = currentX + (targetX - currentX) * interpolationSpeed;
+          const newY = currentY + (targetY - currentY) * interpolationSpeed;
+          
+          return {
+            ...player,
+            displayX: newX,
+            displayY: newY,
+            isMoving: distance > 0.5,
+            moveProgress: 1 - (distance / Math.sqrt(2)) // Progress from 0 to 1
+          };
+        }
+        
+        return {
+          ...player,
+          displayX: targetX,
+          displayY: targetY,
+          isMoving: false,
+          moveProgress: 1
+        };
+      });
+    });
+
+    animationRef.current = requestAnimationFrame(animatePlayers);
+  }, [gameState.players]);
+
+  // Start/stop animation loop
+  useEffect(() => {
+    animationRef.current = requestAnimationFrame(animatePlayers);
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [animatePlayers]);
+
+  // Initialize interpolated players when game state changes
+  useEffect(() => {
+    setInterpolatedPlayers(gameState.players.map(player => ({
+      ...player,
+      displayX: player.x,
+      displayY: player.y,
+      isMoving: false,
+      moveProgress: 1
+    })));
+  }, [gameState.players]);
+
   const initializeBoard = useCallback(() => {
     const board: Tile[][] = [];
     for (let y = 0; y < BOARD_SIZE; y++) {
@@ -104,12 +206,14 @@ export default function PogoPainter() {
       console.log('Disconnected from server');
     });
 
-    // Game events
-    socketInstance.on('gameState', (state: GameState) => {
-      console.log('Received game state:', state);
-      setGameState(state);
-      setGameStatus(state.gameStarted ? 'playing' : 'waiting');
-    });
+    // Enhanced game state handler with queueing
+  socketInstance.on('gameState', (state: GameState) => {
+    console.log('Received game state:', state);
+    setGameStatus(state.gameStarted ? 'playing' : 'waiting');
+    
+    // Queue board updates for smooth processing
+    setBoardUpdateQueue(prev => [...prev.slice(-2), state]); // Keep only last 2 updates
+  });
 
     socketInstance.on('playerJoined', (player: Player) => {
       setGameState(prev => ({
@@ -123,25 +227,45 @@ export default function PogoPainter() {
         ...prev,
         players: prev.players.map(p => p.id === player.id ? player : p),
       }));
-      // Track last move for animation
+      
+      // Track last move for animation with enhanced feedback
       setLastMove({x: player.x, y: player.y});
       setTimeout(() => setLastMove(null), 800);
+      
+      // Add movement trail effect
+      console.log(`Player ${player.name} moved to (${player.x}, ${player.y})`);
     });
 
+    // Enhanced board update with better synchronization
     socketInstance.on('boardUpdated', (board: Tile[][]) => {
       setGameState(prev => ({ ...prev, board }));
-      // Add painting animation for recently painted tiles
+      
+      // Add painting animation for recently painted tiles with enhanced tracking
       const paintedTiles = [];
+      const currentBoard = gameState.board;
+      
       for (let y = 0; y < board.length; y++) {
         for (let x = 0; x < board[y].length; x++) {
-          if (board[y][x].color && (!gameState.board[y] || !gameState.board[y][x].color)) {
-            paintedTiles.push({x, y});
+          const newTile = board[y][x];
+          const oldTile = currentBoard[y]?.[x];
+          
+          // Check if tile was newly painted or color changed
+          if (newTile.color && (!oldTile || oldTile.color !== newTile.color)) {
+            paintedTiles.push({x, y, color: newTile.color});
           }
         }
       }
+      
       if (paintedTiles.length > 0) {
+        console.log('Painted tiles:', paintedTiles);
         setPaintingAnimations(paintedTiles);
-        setTimeout(() => setPaintingAnimations([]), 600);
+        
+        // Clear animations in waves for better visual effect
+        paintedTiles.forEach((tile, index) => {
+          setTimeout(() => {
+            setPaintingAnimations(prev => prev.filter(p => !(p.x === tile.x && p.y === tile.y)));
+          }, 600 + (index * 50)); // Stagger the animation clearing
+        });
       }
     });
 
@@ -310,7 +434,12 @@ export default function PogoPainter() {
   };
 
   const getPlayerOnTile = (x: number, y: number) => {
-    return gameState.players.find(p => p.x === x && p.y === y);
+    // Use interpolated positions for smooth visual feedback
+    return interpolatedPlayers.find(p => {
+      const playerX = Math.round(p.displayX ?? p.x);
+      const playerY = Math.round(p.displayY ?? p.y);
+      return playerX === x && playerY === y;
+    });
   };
 
   // Debug function to log game state
@@ -414,19 +543,47 @@ export default function PogoPainter() {
                           const playerOnTile = getPlayerOnTile(x, y);
                           const isPainting = paintingAnimations.some(p => p.x === x && p.y === y);
                           const isLastMove = lastMove && lastMove.x === x && lastMove.y === y;
+                          
+                          // Find all interpolated players near this tile for smooth transitions
+                          const nearbyPlayers = interpolatedPlayers.filter(p => {
+                            const playerX = p.displayX ?? p.x;
+                            const playerY = p.displayY ?? p.y;
+                            const distance = Math.sqrt(Math.pow(playerX - x, 2) + Math.pow(playerY - y, 2));
+                            return distance < 1.5; // Players within 1.5 tiles
+                          });
+
                           return (
                             <div
                               key={`${x}-${y}`}
                               className={`game-tile relative aspect-square border-2 border-gray-400 rounded-lg transition-all duration-300 ${tile.color ? 'painted' : ''} ${isPainting ? 'scale-110 highlight' : ''} ${isLastMove ? 'ring-4 ring-yellow-400' : ''} ${playerOnTile ? 'player-occupied' : ''}`}
                               style={{ backgroundColor: getTileColor(tile) }}
                             >
-                              {playerOnTile && (
-                                <div
-                                  className={`player-piece absolute inset-2 rounded-full border-3 border-white shadow-lg ${isLastMove ? 'animate-bounce' : 'animate-pulse'}`}
-                                  style={{ backgroundColor: playerOnTile.color }}
-                                  title={playerOnTile.name}
-                                />
-                              )}
+                              {/* Render all nearby players with smooth positioning */}
+                              {nearbyPlayers.map((player, index) => {
+                                const playerX = player.displayX ?? player.x;
+                                const playerY = player.displayY ?? player.y;
+                                const offsetX = (playerX - x) * 100; // Percentage offset
+                                const offsetY = (playerY - y) * 100;
+                                
+                                return (
+                                  <div
+                                    key={player.id}
+                                    className={`absolute rounded-full border-3 border-white shadow-lg transition-all duration-200 ${player.isMoving ? 'animate-pulse scale-110' : 'scale-100'}`}
+                                    style={{
+                                      backgroundColor: player.color,
+                                      width: '60%',
+                                      height: '60%',
+                                      left: `${20 + offsetX}%`,
+                                      top: `${20 + offsetY}%`,
+                                      transform: `translate(-50%, -50%) scale(${player.isMoving ? 1.1 : 1})`,
+                                      zIndex: index + 1,
+                                      opacity: playerOnTile?.id === player.id ? 1 : 0.7
+                                    }}
+                                    title={player.name}
+                                  />
+                                );
+                              })}
+                              
                               {/* Add coordinate indicators for debugging */}
                               <div className="absolute bottom-0 right-0 text-xs text-gray-500 opacity-30 pointer-events-none">
                                 {x},{y}
