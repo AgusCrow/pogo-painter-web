@@ -194,6 +194,7 @@ export const setupSocket = (io: Server) => {
         
         // Reset board and scores
         gameState.board = initializeBoard();
+        console.log('SERVER: Board initialized:', gameState.board);
         gameState.players.forEach(player => {
           player.score = 0;
           // Random starting position
@@ -203,8 +204,11 @@ export const setupSocket = (io: Server) => {
           // Paint starting position
           const { updatedPlayer } = paintTile(player, player.x, player.y);
           Object.assign(player, updatedPlayer);
+          console.log(`SERVER: Player ${player.name} starting at (${player.x}, ${player.y})`);
         });
 
+        console.log('SERVER: Final game state before broadcast:', gameState);
+        
         // Broadcast game start
         io.emit('gameStarted', gameState);
         broadcastGameState(io);

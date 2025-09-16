@@ -47,7 +47,7 @@ const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
 
 export default function PogoPainter() {
   const [gameState, setGameState] = useState<GameState>({
-    board: [],
+    board: initializeBoard(), // Initialize with proper board instead of empty array
     players: [],
     gameStarted: false,
     currentPlayerId: null,
@@ -194,6 +194,7 @@ export default function PogoPainter() {
   }, [messages]);
 
   useEffect(() => {
+    console.log('CLIENT: Initializing game state with board:', initializeBoard());
     // Initialize game state with proper board
     const initialBoard = initializeBoard();
     setGameState(prev => ({
@@ -291,6 +292,7 @@ export default function PogoPainter() {
     });
 
     socketInstance.on('gameStarted', (state: GameState) => {
+      console.log('CLIENT: Game started event received:', state);
       setGameState(state);
       setGameStatus('playing');
     });
@@ -555,37 +557,44 @@ export default function PogoPainter() {
                         height: '100%'
                       }}
                     >
-                      {gameState.board.map((row, y) =>
-                        row.map((tile, x) => {
-                          // Simplified rendering - just show players at exact positions
-                          const playerOnTile = getPlayerOnTile(x, y);
-                          const isPainting = paintingAnimations.some(p => p.x === x && p.y === y);
-                          const isLastMove = lastMove && lastMove.x === x && lastMove.y === y;
+                      {gameState.board.length > 0 ? (
+                        gameState.board.map((row, y) =>
+                          row.map((tile, x) => {
+                            // Simplified rendering - just show players at exact positions
+                            const playerOnTile = getPlayerOnTile(x, y);
+                            const isPainting = paintingAnimations.some(p => p.x === x && p.y === y);
+                            const isLastMove = lastMove && lastMove.x === x && lastMove.y === y;
 
-                          return (
-                            <div
-                              key={`${x}-${y}`}
-                              className={`game-tile relative aspect-square border-2 border-gray-400 rounded-lg transition-all duration-300 ${tile.color ? 'painted' : ''} ${isPainting ? 'scale-110 highlight' : ''} ${isLastMove ? 'ring-4 ring-yellow-400' : ''} ${playerOnTile ? 'player-occupied' : ''}`}
-                              style={{ backgroundColor: getTileColor(tile) }}
-                            >
-                              {/* Simple player rendering */}
-                              {playerOnTile && (
-                                <div
-                                  className="absolute inset-2 rounded-full border-3 border-white shadow-lg animate-pulse"
-                                  style={{
-                                    backgroundColor: playerOnTile.color,
-                                  }}
-                                  title={playerOnTile.name}
-                                />
-                              )}
-                              
-                              {/* Add coordinate indicators for debugging */}
-                              <div className="absolute bottom-0 right-0 text-xs text-gray-500 opacity-30 pointer-events-none">
-                                {x},{y}
+                            return (
+                              <div
+                                key={`${x}-${y}`}
+                                className={`game-tile relative aspect-square border-2 border-gray-400 rounded-lg transition-all duration-300 ${tile.color ? 'painted' : ''} ${isPainting ? 'scale-110 highlight' : ''} ${isLastMove ? 'ring-4 ring-yellow-400' : ''} ${playerOnTile ? 'player-occupied' : ''}`}
+                                style={{ backgroundColor: getTileColor(tile) }}
+                              >
+                                {/* Simple player rendering */}
+                                {playerOnTile && (
+                                  <div
+                                    className="absolute inset-2 rounded-full border-3 border-white shadow-lg animate-pulse"
+                                    style={{
+                                      backgroundColor: playerOnTile.color,
+                                    }}
+                                    title={playerOnTile.name}
+                                  />
+                                )}
+                                
+                                {/* Add coordinate indicators for debugging */}
+                                <div className="absolute bottom-0 right-0 text-xs text-gray-500 opacity-30 pointer-events-none">
+                                  {x},{y}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })
+                            );
+                          })
+                        )
+                      ) : (
+                        <div className="col-span-full text-center text-gray-500 p-8">
+                          <p>Initializing board...</p>
+                          <p className="text-sm">Board length: {gameState.board.length}</p>
+                        </div>
                       )}
                     </div>
                   </div>
