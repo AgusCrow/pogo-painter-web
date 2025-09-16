@@ -107,16 +107,17 @@ export default function PogoPainter() {
 
   // Monitor board changes for debugging
   useEffect(() => {
-    if (gameState.board.length > 0) {
-      console.log('CLIENT: Board updated, sample tiles:', {
+    console.log('CLIENT: Board state changed:', {
+      boardLength: gameState.board.length,
+      paintedTiles: gameState.board.flat().filter(tile => tile.color).length,
+      sampleTiles: {
         '0,0': gameState.board[0]?.[0],
         '1,1': gameState.board[1]?.[1],
         '2,2': gameState.board[2]?.[2],
-        boardSize: gameState.board.length,
-        paintedTiles: gameState.board.flat().filter(tile => tile.color).length
-      });
-    }
-  }, [gameState.board]);
+      },
+      players: gameState.players.map(p => ({ name: p.name, x: p.x, y: p.y, color: p.color }))
+    });
+  }, [gameState.board, gameState.players]);
   const animatePlayers = useCallback(() => {
     const now = Date.now();
     const deltaTime = now - lastUpdateTime.current;
@@ -223,16 +224,20 @@ export default function PogoPainter() {
 
     // Enhanced game state handler with queueing
   socketInstance.on('gameState', (state: GameState) => {
-    console.log('CLIENT: Received gameState event:', state);
+    console.log('CLIENT: Received gameState event:', {
+      boardLength: state.board.length,
+      paintedTiles: state.board.flat().filter(tile => tile.color).length,
+      players: state.players.length,
+      gameStarted: state.gameStarted
+    });
+    
     setGameStatus(state.gameStarted ? 'playing' : 'waiting');
     
     // Update game state immediately for board updates
-    setGameState(prev => ({
-      ...prev,
-      board: state.board,
-      players: state.players,
-      gameStarted: state.gameStarted
-    }));
+    setGameState({
+      ...state,
+      board: state.board.map(row => row.map(tile => ({ ...tile }))) // Deep copy
+    });
   });
 
     socketInstance.on('playerJoined', (player: Player) => {
@@ -256,7 +261,16 @@ export default function PogoPainter() {
 
     // Enhanced board update with better synchronization
     socketInstance.on('boardUpdated', (board: Tile[][]) => {
-      console.log('CLIENT: Received boardUpdated event:', board);
+      console.log('CLIENT: Received boardUpdated event:', {
+        boardLength: board.length,
+        paintedTiles: board.flat().filter(tile => tile.color).length,
+        sampleTiles: {
+          '0,0': board[0]?.[0],
+          '1,1': board[1]?.[1],
+          '2,2': board[2]?.[2],
+        }
+      });
+      
       setGameState(prev => {
         const currentBoard = prev.board;
         const paintedTiles = [];
@@ -288,7 +302,10 @@ export default function PogoPainter() {
           });
         }
         
-        return { ...prev, board };
+        return { 
+          ...prev, 
+          board: board.map(row => row.map(tile => ({ ...tile }))) // Deep copy
+        };
       });
     });
 
@@ -522,13 +539,28 @@ export default function PogoPainter() {
               {getGameStatusMessage()}
             </Badge>
             {process.env.NODE_ENV === 'development' && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={debugGameState}
-              >
-                Debug
-              </Button>
+              <>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={debugGameState}
+                >
+                  Debug
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    // Force paint a tile for testing
+                    const testBoard = [...gameState.board];
+                    testBoard[0][0] = { x: 0, y: 0, color: '#ff0000', playerId: 'test' };
+                    setGameState(prev => ({ ...prev, board: testBoard }));
+                    console.log('CLIENT: Force painted tile at (0,0)');
+                  }}
+                >
+                  Paint Test
+                </Button>
+              </>
             )}
           </div>
         </div>
