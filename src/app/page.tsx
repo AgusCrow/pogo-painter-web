@@ -92,7 +92,18 @@ export default function PogoPainter() {
     }
   }, [boardUpdateQueue, processBoardUpdates]);
 
-  // Animation system for smooth player movement
+  // Monitor board changes for debugging
+  useEffect(() => {
+    if (gameState.board.length > 0) {
+      console.log('CLIENT: Board updated, sample tiles:', {
+        '0,0': gameState.board[0]?.[0],
+        '1,1': gameState.board[1]?.[1],
+        '2,2': gameState.board[2]?.[2],
+        boardSize: gameState.board.length,
+        paintedTiles: gameState.board.flat().filter(tile => tile.color).length
+      });
+    }
+  }, [gameState.board]);
   const animatePlayers = useCallback(() => {
     const now = Date.now();
     const deltaTime = now - lastUpdateTime.current;
@@ -210,10 +221,16 @@ export default function PogoPainter() {
 
     // Enhanced game state handler with queueing
   socketInstance.on('gameState', (state: GameState) => {
+    console.log('CLIENT: Received gameState event:', state);
     setGameStatus(state.gameStarted ? 'playing' : 'waiting');
     
-    // Queue board updates for smooth processing
-    setBoardUpdateQueue(prev => [...prev.slice(-2), state]); // Keep only last 2 updates
+    // Update game state immediately for board updates
+    setGameState(prev => ({
+      ...prev,
+      board: state.board,
+      players: state.players,
+      gameStarted: state.gameStarted
+    }));
   });
 
     socketInstance.on('playerJoined', (player: Player) => {
@@ -237,34 +254,40 @@ export default function PogoPainter() {
 
     // Enhanced board update with better synchronization
     socketInstance.on('boardUpdated', (board: Tile[][]) => {
-      setGameState(prev => ({ ...prev, board }));
-      
-      // Add painting animation for recently painted tiles with enhanced tracking
-      const paintedTiles = [];
-      const currentBoard = gameState.board;
-      
-      for (let y = 0; y < board.length; y++) {
-        for (let x = 0; x < board[y].length; x++) {
-          const newTile = board[y][x];
-          const oldTile = currentBoard[y]?.[x];
-          
-          // Check if tile was newly painted or color changed
-          if (newTile.color && (!oldTile || oldTile.color !== newTile.color)) {
-            paintedTiles.push({x, y, color: newTile.color});
+      console.log('CLIENT: Received boardUpdated event:', board);
+      setGameState(prev => {
+        const currentBoard = prev.board;
+        const paintedTiles = [];
+        
+        // Check for newly painted tiles
+        for (let y = 0; y < board.length; y++) {
+          for (let x = 0; x < board[y].length; x++) {
+            const newTile = board[y][x];
+            const oldTile = currentBoard[y]?.[x];
+            
+            // Check if tile was newly painted or color changed
+            if (newTile.color && (!oldTile || oldTile.color !== newTile.color)) {
+              paintedTiles.push({x, y, color: newTile.color});
+            }
           }
         }
-      }
-      
-      if (paintedTiles.length > 0) {
-        setPaintingAnimations(paintedTiles);
         
-        // Clear animations in waves for better visual effect
-        paintedTiles.forEach((tile, index) => {
-          setTimeout(() => {
-            setPaintingAnimations(prev => prev.filter(p => !(p.x === tile.x && p.y === tile.y)));
-          }, 400 + (index * 30)); // Stagger the animation clearing
-        });
-      }
+        console.log('CLIENT: Painted tiles detected:', paintedTiles);
+        
+        // Trigger painting animations
+        if (paintedTiles.length > 0) {
+          setPaintingAnimations(paintedTiles);
+          
+          // Clear animations in waves for better visual effect
+          paintedTiles.forEach((tile, index) => {
+            setTimeout(() => {
+              setPaintingAnimations(prev => prev.filter(p => !(p.x === tile.x && p.y === tile.y)));
+            }, 400 + (index * 30)); // Stagger the animation clearing
+          });
+        }
+        
+        return { ...prev, board };
+      });
     });
 
     socketInstance.on('gameStarted', (state: GameState) => {

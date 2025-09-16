@@ -147,6 +147,7 @@ export const setupSocket = (io: Server) => {
 
         console.log('SERVER: Updated player:', updatedPlayer);
         console.log('SERVER: Board updated:', boardUpdated);
+        console.log('SERVER: Tile state after painting:', gameState.board[data.y][data.x]);
 
         // Update player in game state
         const playerIndex = gameState.players.findIndex(p => p.id === data.playerId);
@@ -161,6 +162,7 @@ export const setupSocket = (io: Server) => {
         // Emit board update if tile was painted
         if (boardUpdated) {
           console.log(`SERVER: Tile painted at (${data.x}, ${data.y}) by ${player.name}`);
+          console.log('SERVER: Emitting boardUpdated event with board:', gameState.board);
           io.emit('boardUpdated', gameState.board);
         }
 
