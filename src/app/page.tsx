@@ -111,16 +111,9 @@ export default function PogoPainter() {
         // Calculate distance
         const distance = Math.sqrt(Math.pow(targetX - currentX, 2) + Math.pow(targetY - currentY, 2));
         
-        console.log(`Animating player ${player.name}:`, {
-          target: { x: targetX, y: targetY },
-          current: { x: currentX, y: currentY },
-          distance,
-          isMoving: distance > 0.1
-        });
-        
         // If distance is significant, interpolate
         if (distance > 0.1) {
-          const interpolationSpeed = Math.min(deltaTime / 200, 1); // 200ms for full movement
+          const interpolationSpeed = Math.min(deltaTime / 150, 1); // 150ms for faster movement
           const newX = currentX + (targetX - currentX) * interpolationSpeed;
           const newY = currentY + (targetY - currentY) * interpolationSpeed;
           
@@ -128,7 +121,7 @@ export default function PogoPainter() {
             ...player,
             displayX: newX,
             displayY: newY,
-            isMoving: distance > 0.5,
+            isMoving: distance > 0.3,
             moveProgress: 1 - (distance / Math.sqrt(2)) // Progress from 0 to 1
           };
         }
@@ -142,7 +135,6 @@ export default function PogoPainter() {
         };
       });
       
-      console.log('Interpolated players:', newPlayers);
       return newPlayers;
     });
 
@@ -218,7 +210,6 @@ export default function PogoPainter() {
 
     // Enhanced game state handler with queueing
   socketInstance.on('gameState', (state: GameState) => {
-    console.log('CLIENT: Received game state:', state);
     setGameStatus(state.gameStarted ? 'playing' : 'waiting');
     
     // Queue board updates for smooth processing
@@ -233,8 +224,6 @@ export default function PogoPainter() {
     });
 
     socketInstance.on('playerMoved', (player: Player) => {
-      console.log('CLIENT: Player moved event received:', player);
-      
       // Update game state immediately for responsiveness
       setGameState(prev => ({
         ...prev,
@@ -243,10 +232,7 @@ export default function PogoPainter() {
       
       // Track last move for animation with enhanced feedback
       setLastMove({x: player.x, y: player.y});
-      setTimeout(() => setLastMove(null), 800);
-      
-      // Add movement trail effect
-      console.log(`CLIENT: Player ${player.name} moved to (${player.x}, ${player.y})`);
+      setTimeout(() => setLastMove(null), 600);
     });
 
     // Enhanced board update with better synchronization
@@ -270,14 +256,13 @@ export default function PogoPainter() {
       }
       
       if (paintedTiles.length > 0) {
-        console.log('Painted tiles:', paintedTiles);
         setPaintingAnimations(paintedTiles);
         
         // Clear animations in waves for better visual effect
         paintedTiles.forEach((tile, index) => {
           setTimeout(() => {
             setPaintingAnimations(prev => prev.filter(p => !(p.x === tile.x && p.y === tile.y)));
-          }, 600 + (index * 50)); // Stagger the animation clearing
+          }, 400 + (index * 30)); // Stagger the animation clearing
         });
       }
     });
@@ -315,16 +300,13 @@ export default function PogoPainter() {
 
     // Move confirmation events
     socketInstance.on('moveConfirmed', (data: { success: boolean; position?: {x: number, y: number}; score?: number; error?: string }) => {
-      console.log('CLIENT: Move confirmation received:', data);
       if (data.success) {
-        console.log('CLIENT: Move confirmed:', data);
         // Add visual feedback for successful move
         if (data.position) {
           setLastMove(data.position);
-          setTimeout(() => setLastMove(null), 800);
+          setTimeout(() => setLastMove(null), 600);
         }
       } else {
-        console.log('CLIENT: Move failed:', data.error);
         // Show error feedback
         setMessages(prev => [...prev, {
           text: `Move failed: ${data.error || 'Unknown error'}`,
@@ -373,38 +355,30 @@ export default function PogoPainter() {
   };
 
   const movePlayer = (dx: number, dy: number) => {
-    console.log('movePlayer called:', { dx, dy, gameStarted: gameState.gameStarted, currentPlayerId: gameState.currentPlayerId, socket: !!socket });
-    
     if (!socket || !gameState.currentPlayerId || !gameState.gameStarted) return;
 
     const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayerId);
-    if (!currentPlayer) {
-      console.log('Current player not found');
-      return;
-    }
+    if (!currentPlayer) return;
 
     const newX = currentPlayer.x + dx;
     const newY = currentPlayer.y + dy;
 
-    console.log('Attempting move:', { from: { x: currentPlayer.x, y: currentPlayer.y }, to: { x: newX, y: newY } });
-
     if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE) {
-      console.log('Sending move to server');
       socket.emit('movePlayer', {
         playerId: gameState.currentPlayerId,
         x: newX,
         y: newY,
       });
-    } else {
-      console.log('Invalid move position');
     }
   };
 
   const sendChatMessage = () => {
-    if (socket && chatMessage.trim() && gameState.currentPlayerId) {
+    if (socket && chatMessage.trim() && gameState.currentPlayerId && gameState.gameStarted) {
+      const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayerId);
       socket.emit('message', {
         text: chatMessage.trim(),
         senderId: gameState.currentPlayerId,
+        senderName: currentPlayer?.name || 'Unknown',
       });
       setChatMessage('');
     }
@@ -413,35 +387,29 @@ export default function PogoPainter() {
   const handleKeyPress = useCallback((e: KeyboardEvent) => {
     if (!gameState.gameStarted) return;
     
-    console.log('Key pressed:', e.key, 'Game started:', gameState.gameStarted, 'Current player:', gameState.currentPlayerId);
-    
     switch(e.key) {
       case 'ArrowUp':
       case 'w':
       case 'W':
         e.preventDefault();
-        console.log('Moving up');
         movePlayer(0, -1);
         break;
       case 'ArrowDown':
       case 's':
       case 'S':
         e.preventDefault();
-        console.log('Moving down');
         movePlayer(0, 1);
         break;
       case 'ArrowLeft':
       case 'a':
       case 'A':
         e.preventDefault();
-        console.log('Moving left');
         movePlayer(-1, 0);
         break;
       case 'ArrowRight':
       case 'd':
       case 'D':
         e.preventDefault();
-        console.log('Moving right');
         movePlayer(1, 0);
         break;
     }
@@ -780,12 +748,12 @@ export default function PogoPainter() {
                     onChange={(e) => setChatMessage(e.target.value)}
                     onKeyPress={handleChatKeyPress}
                     placeholder="Type a message..."
-                    disabled={!isConnected || !joinedGame}
+                    disabled={!isConnected || !joinedGame || !gameState.gameStarted}
                     className="flex-1"
                   />
                   <Button 
                     onClick={sendChatMessage}
-                    disabled={!isConnected || !joinedGame || !chatMessage.trim()}
+                    disabled={!isConnected || !joinedGame || !gameState.gameStarted || !chatMessage.trim()}
                     size="sm"
                   >
                     Send
