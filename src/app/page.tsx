@@ -350,7 +350,7 @@ export default function PogoPainter() {
     return () => {
       socketInstance.disconnect();
     };
-  }, [initializeBoard]);
+  }, []); // Removed initializeBoard dependency
 
   const joinGame = () => {
     if (socket && playerName.trim() && isConnected) {
