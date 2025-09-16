@@ -45,9 +45,22 @@ type Message = {
 const BOARD_SIZE = 12;
 const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
 
+// Simple board initialization function
+const createEmptyBoard = (): Tile[][] => {
+  const board: Tile[][] = [];
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    const row: Tile[] = [];
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      row.push({ x, y, color: null, playerId: null });
+    }
+    board.push(row);
+  }
+  return board;
+};
+
 export default function PogoPainter() {
   const [gameState, setGameState] = useState<GameState>({
-    board: initializeBoard(), // Initialize with proper board instead of empty array
+    board: createEmptyBoard(), // Initialize with proper board instead of empty array
     players: [],
     gameStarted: false,
     currentPlayerId: null,
@@ -173,18 +186,6 @@ export default function PogoPainter() {
     })));
   }, [gameState.players]);
 
-  const initializeBoard = useCallback(() => {
-    const board: Tile[][] = [];
-    for (let y = 0; y < BOARD_SIZE; y++) {
-      const row: Tile[] = [];
-      for (let x = 0; x < BOARD_SIZE; x++) {
-        row.push({ x, y, color: null, playerId: null });
-      }
-      board.push(row);
-    }
-    return board;
-  }, []);
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -194,9 +195,9 @@ export default function PogoPainter() {
   }, [messages]);
 
   useEffect(() => {
-    console.log('CLIENT: Initializing game state with board:', initializeBoard());
+    console.log('CLIENT: Initializing game state with board:', createEmptyBoard());
     // Initialize game state with proper board
-    const initialBoard = initializeBoard();
+    const initialBoard = createEmptyBoard();
     setGameState(prev => ({
       ...prev,
       board: initialBoard,
